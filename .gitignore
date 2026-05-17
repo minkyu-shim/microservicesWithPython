@@ -3,6 +3,7 @@ solution/
 
 # Python
 __pycache__/
+*.db
 *.py[cod]
 *.egg-info/
 .venv/
