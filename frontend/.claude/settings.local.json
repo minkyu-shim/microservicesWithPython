@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Read(//c/Users/$CM7100-M9DP4O11CIGV/Documents/EPITA-WORK/PROJECTS/MicroservicesWithPython/studentsRepo/frontend/**)",
-      "Bash(npm install:*)"
-    ]
-  }
-}
