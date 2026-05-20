@@ -21,7 +21,25 @@ The gateway boilerplate (project structure, `config.py`, catch-all route skeleto
 
 ---
 
-## Part A — Wire up the activity-service *(~50 min)*
+## Part A — Build the gateway _(~40 min)_
+
+The gateway has one job: read the URL path and forward the request to the right service. No auth, no business logic — just routing.
+
+It uses a `ROUTES` dictionary:
+
+```python
+ROUTES = {
+    "users":      "http://localhost:8001",
+    "games":      "http://localhost:8002",
+    "activities": "http://localhost:8003",
+}
+```
+
+When a request arrives at `/v1/users/123`, the gateway splits the path, finds `users` in the dictionary, and forwards the full request to `http://localhost:8001/v1/users/123` — method, headers, and body preserved exactly.
+
+---
+
+## Part B — Wire up the activity-service _(~50 min)_
 
 Every time an activity is created, the activity-service makes two outbound calls:
 
@@ -29,12 +47,14 @@ Every time an activity is created, the activity-service makes two outbound calls
 2. **Enrich** the response with game data from `game-service` — if unreachable, return `"game": null`
 
 These two calls are handled differently on purpose:
+
 - Validation is **critical** — the request must not proceed if the user doesn't exist. It retries on transient errors.
 - Enrichment is **optional** — the activity is saved regardless. It fails gracefully with a null fallback.
 
 Open `services/activity-service/app/main.py` and implement both functions. The signatures and the expected response shape are documented in `docs/api-contracts.md`.
 
 Start all three services before testing:
+
 ```bash
 uvicorn app.main:app --reload --port 8001  # user-service
 uvicorn app.main:app --reload --port 8002  # game-service
@@ -42,6 +62,7 @@ uvicorn app.main:app --reload --port 8003  # activity-service
 ```
 
 Test the flow:
+
 ```bash
 # Create a user first, then log an activity for that user
 curl -X POST http://localhost:8003/v1/activities \
@@ -53,27 +74,14 @@ Check that the response includes the enriched `game` object. Then stop `game-ser
 
 ---
 
-## Part B — Build the gateway *(~40 min)*
-
-The gateway has one job: read the URL path and forward the request to the right service. No auth, no business logic — just routing.
-
-It uses a `ROUTES` dictionary:
-```python
-ROUTES = {
-    "users":      "http://localhost:8001",
-    "games":      "http://localhost:8002",
-    "activities": "http://localhost:8003",
-}
-```
-
-When a request arrives at `/v1/users/123`, the gateway splits the path, finds `users` in the dictionary, and forwards the full request to `http://localhost:8001/v1/users/123` — method, headers, and body preserved exactly.
-
 Rules to implement:
+
 - Unknown resource → `404`
 - Downstream service unreachable → `503 Service Unavailable`
 - `/health` → handled by the gateway itself, never forwarded
 
 Start everything:
+
 ```bash
 uvicorn app.main:app --reload --port 8000  # gateway
 uvicorn app.main:app --reload --port 8001  # user-service
@@ -82,6 +90,7 @@ uvicorn app.main:app --reload --port 8003  # activity-service
 ```
 
 From this point on, all calls go through port 8000:
+
 ```bash
 curl http://localhost:8000/health
 curl http://localhost:8000/v1/users
@@ -91,7 +100,7 @@ curl http://localhost:8000/v1/activities
 
 ---
 
-## Discussion *(~15 min)*
+## Discussion _(~15 min)_
 
 - The downstream services did not change at all when you added the gateway. What does that tell you about the pattern?
 - Why does the validation call retry on failure but the enrichment call doesn't?
