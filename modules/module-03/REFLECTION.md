@@ -18,7 +18,7 @@ All client requests now go through the gateway. No client ever calls a service d
 
 Think about what the client would need to know and manage if it talked to each service on its own port.
 
-> *Your answer:*
+> Without the gateway the client would need to know the port of every single service. And if you add a new service or move one you have to go update every client that talks to it which is a lot of work. With the gateway everyone just sends requests to port 8000 and they dont need to know anything else about whats running behind it.
 
 ---
 
@@ -30,7 +30,7 @@ The activity-service makes two outbound calls: one to validate the user (with re
 
 What is the consequence for the user in each case if the downstream service is unavailable?
 
-> *Your answer:*
+> If the user doesnt exist then the activity shouldnt be saved at all because its just wrong data so that one has to fail. But the game info is just extra stuff we add to the response. The activity still gets saved either way so if game service is down we just put null there and thats fine. It would be annoying if the whole thing failed just because we couldnt fetch some game details.
 
 ---
 
@@ -42,7 +42,7 @@ Every time a client creates an activity, three services are involved synchronous
 
 What happens to the user experience if the slowest service in the chain takes 3 seconds to respond?
 
-> *Your answer:*
+> Everything has to wait for everything else so if one service is slow the whole request is slow. Like if user service takes 3 seconds then the user is already waiting 3 seconds before we even call game service. And if any one of the services goes down the whole thing breaks. The more services you add to the chain the more things can go wrong at the same time.
 
 ---
 
