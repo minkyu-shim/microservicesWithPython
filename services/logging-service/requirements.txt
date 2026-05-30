@@ -1,0 +1,5 @@
+flask
+flask-sqlalchemy
+pika
+python-dotenv
+psycopg2-binary

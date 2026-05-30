@@ -9,6 +9,8 @@ ROUTES: dict[str, str] = {
     "users":      settings.user_service_url,
     "games":      settings.game_service_url,
     "activities": settings.activity_service_url,
+    # Added in Module 4
+    # "notifications": settings.notification_service_url,
 }
 
 
