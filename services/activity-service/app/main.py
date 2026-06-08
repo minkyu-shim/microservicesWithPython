@@ -1,119 +1,128 @@
-# activity-service — Module 3: Synchronous Communication
-#
-# This file wires the FastAPI app together and contains the two outbound
-# HTTP helpers you must implement (see YOUR TASK below).
-#
-# To run:
-#   uvicorn app.main:app --reload --port 8003
-
+import asyncio
+import os
 import httpx
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.database import Base, engine, get_db
-from app import repository, schemas
+from app.models import Activity
+from app.schemas import ActivityCreate, ActivityResponse, ActivityList, GameSummary
+from app.infrastructure.rabbitmq_publisher import publish_activity_event
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="activity-service")
+app = FastAPI(title="activity-service", version="1.0.0")
 
+USER_SERVICE_URL = os.getenv("USER_SERVICE_URL", "http://localhost:8001")
+GAME_SERVICE_URL = os.getenv("GAME_SERVICE_URL", "http://localhost:8002")
 
-# ---------------------------------------------------------------------------
-# YOUR TASK — implement the two functions below
-# ---------------------------------------------------------------------------
 
 async def validate_user(user_id: str) -> None:
-    """
-    Verify that the user exists in user-service before logging an activity.
-
-    Call: GET {settings.user_service_url}/v1/users/{user_id}
-
-    Behaviour:
-    - 200  → user exists, return normally (None)
-    - 404  → raise HTTPException(status_code=404, detail="User not found")
-    - Network error (httpx.RequestError) → retry the call once, then raise
-             HTTPException(status_code=503, detail="user-service unavailable")
-    - Any other non-2xx status → raise HTTPException(status_code=503, ...)
-
-    Use `async with httpx.AsyncClient(timeout=5.0) as client:` for HTTP calls.
-    This call is CRITICAL — the request must not proceed if validation fails.
-    """
-    raise NotImplementedError
-
-
-async def fetch_game(game_id: str) -> dict | None:
-    """
-    Fetch game data from game-service to enrich the activity response.
-
-    Call: GET {settings.game_service_url}/v1/games/{game_id}
-
-    Behaviour:
-    - 200  → return the response JSON as a dict
-    - Any non-2xx status OR network error → return None (do NOT raise)
-
-    This call is OPTIONAL — the activity is saved regardless of the result.
-    Graceful degradation is the goal: the response will include "game": null
-    when game-service is unreachable.
-    """
-    raise NotImplementedError
+    """Critical check — request must not proceed if the user doesn't exist."""
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{USER_SERVICE_URL}/v1/users/{user_id}")
+            if resp.status_code == 404:
+                raise HTTPException(status_code=404, detail="User not found")
+            if resp.status_code < 500:
+                return
+        except HTTPException:
+            raise
+        except httpx.RequestError:
+            pass
+        if attempt < 2:
+            await asyncio.sleep(0.5)
+    raise HTTPException(status_code=503, detail="user-service unavailable")
 
 
-# ---------------------------------------------------------------------------
-# Endpoints — pre-written, they call your two functions above
-# ---------------------------------------------------------------------------
+async def enrich_with_game(game_id: str) -> GameSummary | None:
+    """Optional enrichment — returns None if game-service is unreachable."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{GAME_SERVICE_URL}/v1/games/{game_id}")
+        if resp.status_code == 200:
+            data = resp.json()
+            return GameSummary(
+                id=data["id"],
+                title=data["title"],
+                genre=data["genre"],
+                platform=data["platform"],
+                cover_url=data.get("cover_url"),
+            )
+    except httpx.RequestError:
+        pass
+    return None
+
 
 @app.get("/health")
-def health():
+async def health():
     return {"status": "ok", "service": "activity-service"}
 
 
-@app.post("/v1/activities", response_model=schemas.ActivityOut, status_code=201)
-async def create_activity(data: schemas.ActivityCreate, db: Session = Depends(get_db)):
-    await validate_user(data.user_id)
-    activity = repository.create_activity(db, data)
-    game_data = await fetch_game(activity.game_id)
-    return {
-        "id": activity.id,
-        "user_id": activity.user_id,
-        "action": activity.action,
-        "duration_minutes": activity.duration_minutes,
-        "created_at": activity.created_at,
-        "game": game_data,
-    }
+@app.post("/v1/activities", response_model=ActivityResponse, status_code=201)
+async def create_activity(body: ActivityCreate, db: Session = Depends(get_db)):
+    await validate_user(body.user_id)
+
+    activity = Activity(
+        user_id=body.user_id,
+        game_id=body.game_id,
+        action=body.action,
+        duration_minutes=body.duration_minutes,
+    )
+    db.add(activity)
+    db.commit()
+    db.refresh(activity)
+
+    game = await enrich_with_game(body.game_id)
+    await publish_activity_event(
+        user_id=activity.user_id,
+        game_id=activity.game_id,
+        action=activity.action,
+        game_title=game.title if game else None,
+    )
+    return ActivityResponse(
+        id=activity.id,
+        user_id=activity.user_id,
+        action=activity.action,
+        duration_minutes=activity.duration_minutes,
+        created_at=activity.created_at,
+        game=game,
+    )
 
 
-@app.get("/v1/activities", response_model=schemas.ActivityList)
+@app.get("/v1/activities", response_model=ActivityList)
 async def list_activities(limit: int = 20, offset: int = 0, db: Session = Depends(get_db)):
-    activities, total = repository.list_activities(db, limit=limit, offset=offset)
+    total = db.query(Activity).count()
+    rows = db.query(Activity).offset(offset).limit(limit).all()
     items = []
-    for a in activities:
-        game_data = await fetch_game(a.game_id)
-        items.append({
-            "id": a.id,
-            "user_id": a.user_id,
-            "action": a.action,
-            "duration_minutes": a.duration_minutes,
-            "created_at": a.created_at,
-            "game": game_data,
-        })
-    return schemas.ActivityList(items=items, total=total, limit=limit, offset=offset)
+    for row in rows:
+        game = await enrich_with_game(row.game_id)
+        items.append(ActivityResponse(
+            id=row.id,
+            user_id=row.user_id,
+            action=row.action,
+            duration_minutes=row.duration_minutes,
+            created_at=row.created_at,
+            game=game,
+        ))
+    return ActivityList(items=items, total=total, limit=limit, offset=offset)
 
 
-@app.get("/v1/activities/user/{user_id}", response_model=schemas.ActivityList)
-async def list_user_activities(
-    user_id: str, limit: int = 20, offset: int = 0, db: Session = Depends(get_db)
-):
-    activities, total = repository.list_user_activities(db, user_id, limit=limit, offset=offset)
+@app.get("/v1/activities/user/{user_id}", response_model=ActivityList)
+async def list_user_activities(user_id: str, limit: int = 20, offset: int = 0, db: Session = Depends(get_db)):
+    query = db.query(Activity).filter(Activity.user_id == user_id)
+    total = query.count()
+    rows = query.offset(offset).limit(limit).all()
     items = []
-    for a in activities:
-        game_data = await fetch_game(a.game_id)
-        items.append({
-            "id": a.id,
-            "user_id": a.user_id,
-            "action": a.action,
-            "duration_minutes": a.duration_minutes,
-            "created_at": a.created_at,
-            "game": game_data,
-        })
-    return schemas.ActivityList(items=items, total=total, limit=limit, offset=offset)
+    for row in rows:
+        game = await enrich_with_game(row.game_id)
+        items.append(ActivityResponse(
+            id=row.id,
+            user_id=row.user_id,
+            action=row.action,
+            duration_minutes=row.duration_minutes,
+            created_at=row.created_at,
+            game=game,
+        ))
+    return ActivityList(items=items, total=total, limit=limit, offset=offset)

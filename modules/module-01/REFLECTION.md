@@ -22,7 +22,7 @@ You started from a painful monolith. Now you're splitting it into separate servi
 
 Think about it from three angles: the developer who has to change code, the team that has to deploy it, and the user who has to live with its failures. You don't need to cover all three, pick the one that felt most real to you today.
 
-> _Your answer:_
+> _In the original painful monolithic project, a bug in a single point will crash the entire app. Let's say for example, we have a bug in the notification service. With the monolithic project, the whole GameHub will crash. However, by using microservices, everything will work except for the notification. In other words, the whole app is not going to crash._
 
 ---
 
@@ -34,7 +34,7 @@ Look at your service map. Every arrow between two services is a decision someone
 
 What would break, slow down, or become harder to manage if you merged those two services back together?
 
-> _Your answer:_
+> _activity service and logging service -- These two may sound very similar because they both write down what happened. However, they have different role. activity service serves the user and the logging service serves the GDPR rules such as opt-in_
 
 ---
 
@@ -46,7 +46,7 @@ Microservices solve the monolith's problems. But they create new ones.
 
 No need to solve it: just name it honestly. This is exactly the tension the rest of the course is about.
 
-> _Your answer:_
+> _In monolithic, the trail for an inbound request was very simple. But the microservice architecture requires more delicacy. For example, logging a game goes to gateway -> activity service -> logging service -> notification service. If something fails, it will be significantly more difficult for us to trace and find out where the error is._
 
 ---
 

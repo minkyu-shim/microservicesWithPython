@@ -26,11 +26,14 @@ A bounded context is a part of the system that has a clear responsibility and ow
 
 For each bounded context you identify, fill in the table:
 
-| Bounded Context | Responsibilities                                         | Owned Entities | Team        |
-| --------------- | -------------------------------------------------------- | -------------- | ----------- |
-| Identity        | Manages who users are, handles registration and profiles | User, Session  | Platform    |
-| Game Library    | _(fill in)_                                              | _(fill in)_    | _(fill in)_ |
-| _(add more)_    |                                                          |                |             |
+| Bounded Context | Responsibilities | Owned Entities | Team |
+|---|---|---|---|
+| Identity | Manages who users are, handles registration and profiles | User, FriendRelationship | Platform |
+| Game Library | Manages game catalog, metadata, and genres | Game, Genre | Catalog |
+| Activity | Tracks play sessions and user actions | Activity, PlaySession | Engagement |
+| Auth | JWT issuance and validation | Token | Platform |
+| Consent & Audit | GDPR opt-in tracking and structured audit trail | ConsentRecord, ActivityLog | Legal/Compliance |
+| Notification | Async delivery of alerts to users | Notification | Engagement |
 
 There is no single correct answer: what matters is that you can justify each row.
 
@@ -54,6 +57,24 @@ Protocol: RabbitMQ message (async — why not REST here?)
 Payload: { activity_id, user_id, action, game_id, timestamp }
 ```
 
+**activity-service → logging-service**
+- Direction: activity-service → logging-service
+- Trigger: user logs a play session
+- Protocol: RabbitMQ
+- Payload: { activity_id, user_id, action, game_id, timestamp }
+
+**activity-service → notification-service**
+- Direction: activity-service → notification-service
+- Trigger: a friend logs an activity that user is subscribed to
+- Protocol: RabbitMQ message
+- Payload: { user_id, friend_id, action, game_id, timestamp }
+
+**gateway → auth-service**
+- Direction: gateway → auth-service
+- Trigger: every request carrying a JWT
+- Protocol: REST API
+- Payload: { token } → { user_id, roles, valid: bool }
+
 Focus on the flows that feel non-obvious. You do not need to document every possible pair.
 
 ---
@@ -65,7 +86,26 @@ Draw the full GameHub service map:
 - One box per service
 - Arrows between services (solid line = synchronous REST, dashed line = async event)
 - Label each arrow with its protocol
-- One box at the top labelled **gateway** — all client requests enter here, no client ever calls a service directly
+- One box at the top labeled **gateway** — all client requests enter here, no client ever calls a service directly
+
+```
+              [Client]
+                 │
+                 ▼
+          [Gateway :8000]──────────────────────────►[auth-service :8005]
+          │       │       │          │                    (JWT validation)
+          │       │       │          │
+          ▼       ▼       ▼          ▼
+    [user-service] [game-service] [activity-service]   [logging-service :8006]
+       :8001          :8002          :8003                    ▲
+                        │               │                     │
+                      Redis          RabbitMQ ────────────────┘
+                      cache             │
+                                        └──────────►[notification-service :8004]
+                                                        
+```
+
+Solid arrows = synchronous REST. RabbitMQ lines = async events.
 
 This can be a sketch on paper, a whiteboard photo, or ASCII art committed to your branch.
 
@@ -76,8 +116,16 @@ This can be a sketch on paper, a whiteboard photo, or ASCII art committed to you
 Three questions to discuss as a team before you leave:
 
 1. Why does `notification-service` use Node.js instead of Python like the rest? What does that tell you about microservices and technology choices?
+
+> Each service can use whatever technology fits it best, because services only talk to each other through agreed-upon message formats — not shared code. Node.js is a natural fit here because it's designed to handle lots of small events efficiently, like listening for messages and forwarding alerts. The language choice stays invisible to the rest of the system.
+
 2. What is the risk of `activity-service` calling `logging-service` synchronously — why might you prefer an async event instead?
+
+> If activity-service sends data to logging-service and waits for a response, a slow or crashed logging-service would cause the whole activity write to fail or freeze — the user would feel that delay. By sending it as an async message instead, activity-service drops the message in a queue and moves on. Logging-service picks it up when it's ready, and neither service blocks the other.
+
 3. Why does `logging-service` need a GDPR consent check before recording any activity?
+
+> Recording what a user does counts as personal data under EU law (GDPR). Before storing any of it, the service has to confirm the user actually agreed to be tracked. If they said no, the data simply doesn't get saved — no exceptions.
 
 You do not need to write these answers down — they are warm-up for your REFLECTION.md.
 

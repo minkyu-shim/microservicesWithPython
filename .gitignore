@@ -3,6 +3,7 @@ solution/
 
 # Python
 __pycache__/
+*.db
 *.py[cod]
 *.egg-info/
 .venv/
@@ -29,6 +30,10 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Claude Code
+.claude/
+CLAUDE.md
 
 # Docker
 .dockerignore
