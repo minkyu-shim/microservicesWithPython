@@ -1,9 +1,17 @@
 import httpx
 from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 
 app = FastAPI(title="gateway", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 ROUTES: dict[str, str] = {
     "users":      settings.user_service_url,
