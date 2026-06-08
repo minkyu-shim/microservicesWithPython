@@ -1,48 +1,32 @@
 # Module 4 — Reflection
 
-**Team name**: _______________
-**Branch**: `module-04/<team-name>`
+**Team name**: minkyu
+**Branch**: `module-04/minkyu`
 **Submitted**: before Module 5 lesson
 
 ---
 
-Answer the three questions below. There are no right or wrong answers — we are looking for your reasoning, not a textbook definition. A few honest sentences are worth more than a long generic paragraph.
+## 1. What happens if notification-service is down when the message is published?
+
+The activity still gets created. The activity is saved to the database before the message is ever sent. If RabbitMQ has a problem or notification-service is down, the publisher logs the error and moves on. The user gets a success response either way. The notification just gets lost quietly — no retry, no alarm.
+
+So no, the activity creation should not fail. The two things are separate. Saving an activity and sending a notification are not the same operation, and one should not depend on the other.
 
 ---
 
-## 1. The "why"
+## 2. Why use a broker instead of calling notification-service directly over HTTP?
 
-In Module 3, services called each other directly over HTTP. Now activity-service drops a message into a broker and moves on — it never waits for a reply.
+When we called game-service in Module 3, we needed the data right away to build the response. The activity response couldn't be returned without it, so a direct HTTP call made sense.
 
-**What does the activity-service gain by not waiting? And what does the notification-service gain by consuming at its own pace?**
-
-Think about what happens under load, or when notification-service is temporarily down.
-
-> *Your answer:*
+Notifications are different. Nobody is waiting for them. If we called notification-service over HTTP, every activity creation would slow down or break whenever notification-service had a problem. With RabbitMQ in the middle, activity-service drops the message and walks away. It doesn't care what happens next. The two services don't even need to be running at the same time.
 
 ---
 
-## 2. Your choice
+## 3. What visibility do you lose compared to a synchronous call?
 
-In Module 3 you already knew how to call another service directly over HTTP — you did it for user validation and game enrichment.
+With a direct HTTP call, you get an answer immediately — it worked or it didn't. Here you have no idea. You know the message was published to RabbitMQ, but you don't know if notification-service ever picked it up, processed it, or crashed halfway through.
 
-**Why not use the same approach for notifications? What does introducing a broker give you that a direct HTTP call doesn't?**
-
-Think about what happens if notification-service is slow, or crashes mid-message.
-
-> *Your answer:*
-
----
-
-## 3. The tradeoff
-
-With synchronous REST, you get an immediate answer: success or failure. With async messaging, the activity is saved and the message is sent — but you have no idea if the notification was ever delivered.
-
-**How would a user know if their notification was never sent? How would you know as a developer?**
-
-What visibility do you lose when you go async?
-
-> *Your answer:*
+As a developer, you'd need extra tools to figure out what actually happened — the RabbitMQ management dashboard, dead-letter queues for failed messages, or logs on the notification-service side. None of that is automatic. You have to build it in.
 
 ---
 
