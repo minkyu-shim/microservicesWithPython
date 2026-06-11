@@ -43,12 +43,5 @@ class ActivityLog(db.Model):
 # ---------------------------------------------------------------------------
 
 def has_consent(user_id: str) -> bool:
-    """
-    Return True if the user has an active consent record with granted=True.
-    Return False in all other cases (no record, or granted=False).
-
-    The consumer calls this before writing every log entry:
-        if has_consent(payload["user_id"]):
-            # store the log
-    """
-    raise NotImplementedError
+    record = Consent.query.get(user_id)
+    return record is not None and record.granted is True
