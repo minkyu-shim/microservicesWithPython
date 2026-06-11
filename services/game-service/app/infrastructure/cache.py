@@ -53,21 +53,8 @@ def set_game_summary(game_id: str, data: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def get_game_summary(game_id: str) -> dict | None:
-    """
-    Retrieve a game summary projection from Redis.
-
-    Returns the cached dict if the key exists, or None if it was never cached
-    (e.g. the game was added before Redis was running).
-
-    Steps:
-    1. Get the Redis client with _get_client()
-    2. Fetch the raw value: r.get(_key(game_id))
-    3. If None → return None
-    4. Otherwise → return json.loads(raw)
-
-    Once implemented, add this endpoint to routes.py:
-        GET /v1/games/{game_id}/summary
-        → call get_game_summary(game_id)
-        → return 200 with the dict, or 404 if None
-    """
-    raise NotImplementedError
+    r = _get_client()
+    raw = r.get(_key(game_id))
+    if raw is None:
+        return None
+    return json.loads(raw)
