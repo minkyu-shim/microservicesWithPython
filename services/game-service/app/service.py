@@ -33,6 +33,12 @@ def fetch_all_games(db: Session, limit: int = 20, offset: int = 0) -> GameList:
     )
 
 
+def remove_game(db: Session, game_id: str) -> None:
+    found = repository.delete_game(db, game_id)
+    if not found:
+        raise ValueError(f"Game {game_id} not found")
+
+
 def find_games(db: Session, q: str, limit: int = 20, offset: int = 0) -> GameList:
     games, total = repository.search_games(db, q, limit=limit, offset=offset)
     return GameList(
