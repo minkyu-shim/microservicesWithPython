@@ -8,6 +8,7 @@ from app.database import Base, engine, get_db
 from app.models import Activity
 from app.schemas import ActivityCreate, ActivityResponse, ActivityList, GameSummary
 from app.infrastructure.rabbitmq_publisher import publish_activity_event
+from app.infrastructure.auth_client import get_auth_headers
 
 Base.metadata.create_all(bind=engine)
 
@@ -19,10 +20,11 @@ GAME_SERVICE_URL = os.getenv("GAME_SERVICE_URL", "http://localhost:8002")
 
 async def validate_user(user_id: str) -> None:
     """Critical check — request must not proceed if the user doesn't exist."""
+    headers = await get_auth_headers()
     for attempt in range(3):
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(f"{USER_SERVICE_URL}/v1/users/{user_id}")
+                resp = await client.get(f"{USER_SERVICE_URL}/v1/users/{user_id}", headers=headers)
             if resp.status_code == 404:
                 raise HTTPException(status_code=404, detail="User not found")
             if resp.status_code < 500:
@@ -39,8 +41,9 @@ async def validate_user(user_id: str) -> None:
 async def enrich_with_game(game_id: str) -> GameSummary | None:
     """Optional enrichment — returns None if game-service is unreachable."""
     try:
+        headers = await get_auth_headers()
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{GAME_SERVICE_URL}/v1/games/{game_id}")
+            resp = await client.get(f"{GAME_SERVICE_URL}/v1/games/{game_id}", headers=headers)
         if resp.status_code == 200:
             data = resp.json()
             return GameSummary(

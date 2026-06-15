@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import service, schemas
+from app.infrastructure.cache import get_game_summary
+from app.security import require_admin
 
 router = APIRouter(prefix="/v1/games", tags=["games"])
 
@@ -21,9 +23,25 @@ def search_games(q: str, limit: int = 20, offset: int = 0, db: Session = Depends
     return service.find_games(db, q, limit=limit, offset=offset)
 
 
+@router.get("/{game_id}/summary")
+def get_game_summary_endpoint(game_id: str):
+    summary = get_game_summary(game_id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail=f"No cached summary for game {game_id}")
+    return summary
+
+
 @router.get("/{game_id}", response_model=schemas.GameOut)
 def get_game(game_id: str, db: Session = Depends(get_db)):
     try:
         return service.fetch_game(db, game_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.delete("/{game_id}", status_code=204, dependencies=[Depends(require_admin)])
+def delete_game(game_id: str, db: Session = Depends(get_db)):
+    try:
+        service.remove_game(db, game_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

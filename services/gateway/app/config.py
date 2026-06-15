@@ -11,11 +11,11 @@ class Settings(BaseSettings):
     notification_service_url: str = "http://localhost:8004"
 
     # Added in Module 5
-    # logging_service_url: str = "http://localhost:8006"
+    logging_service_url: str = "http://localhost:8006"
 
     # Added in Module 6
-    # auth_service_url: str = "http://localhost:8005"
-    # secret_key: str = "dev-secret-change-in-production"
+    auth_service_url: str = "http://localhost:8005"
+    secret_key: str = "dev-secret-change-in-production"
 
     class Config:
         env_file = ".env"
