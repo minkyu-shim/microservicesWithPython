@@ -6,13 +6,16 @@ from app.infrastructure.cache import set_game_summary
 
 def add_game(db: Session, data: GameCreate) -> GameOut:
     game = repository.create_game(db, data)
-    set_game_summary(game.id, {
-        "id": game.id,
-        "title": game.title,
-        "genre": game.genre,
-        "platform": game.platform,
-        "cover_url": game.cover_url,
-    })
+    try:
+        set_game_summary(game.id, {
+            "id": game.id,
+            "title": game.title,
+            "genre": game.genre,
+            "platform": game.platform,
+            "cover_url": game.cover_url,
+        })
+    except Exception:
+        pass  # Redis unavailable — cache skipped, DB write already committed
     return GameOut.model_validate(game)
 
 

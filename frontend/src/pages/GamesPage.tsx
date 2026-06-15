@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { gamesApi, type Game } from '../api/games'
+import CreateGameForm from '../components/CreateGameForm'
 
 const GamesPage = () => {
   const [games, setGames] = useState<Game[]>([])
@@ -25,9 +26,18 @@ const GamesPage = () => {
     fetchGames(query)
   }
 
+  const handleCreated = (game: Game) => {
+    setGames(prev => [game, ...prev])
+    setTotal(prev => prev + 1)
+  }
+
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Games <span className="text-gray-500 text-sm">({total})</span></h1>
+      <h1 className="text-2xl font-bold mb-4">
+        Games <span className="text-gray-500 text-sm">({total})</span>
+      </h1>
+
+      <CreateGameForm onCreated={handleCreated} />
 
       <form onSubmit={handleSearch} className="flex gap-2 mb-6">
         <input
@@ -41,7 +51,11 @@ const GamesPage = () => {
           Search
         </button>
         {query && (
-          <button type="button" onClick={() => { setQuery(''); fetchGames('') }} className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600">
+          <button
+            type="button"
+            onClick={() => { setQuery(''); fetchGames('') }}
+            className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600"
+          >
             Clear
           </button>
         )}
@@ -54,11 +68,15 @@ const GamesPage = () => {
         <ul className="space-y-2">
           {games.map(g => (
             <li key={g.id} className="p-3 bg-gray-800 rounded flex items-center gap-4">
-              {g.cover_url && <img src={g.cover_url} alt={g.title} className="w-10 h-10 object-cover rounded" />}
+              {g.cover_url && (
+                <img src={g.cover_url} alt={g.title} className="w-10 h-10 object-cover rounded" />
+              )}
               <div>
                 <span className="font-medium">{g.title}</span>
                 <span className="text-gray-400 ml-3 text-sm">{g.genre} · {g.platform}</span>
-                {g.release_year && <span className="text-gray-500 ml-2 text-sm">{g.release_year}</span>}
+                {g.release_year && (
+                  <span className="text-gray-500 ml-2 text-sm">{g.release_year}</span>
+                )}
               </div>
             </li>
           ))}

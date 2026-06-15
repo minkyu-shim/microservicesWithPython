@@ -13,6 +13,13 @@ export interface Game {
   created_at: string
 }
 
+export interface GameSummary {
+  id: string
+  title: string
+  genre: string
+  platform: string
+}
+
 export interface GameList {
   items: Game[]
   total: number
@@ -40,4 +47,7 @@ export const gamesApi = USE_MOCK ? mockGamesApi : {
 
   create: (data: GameCreate) =>
     api.post<Game>('/v1/games', data),
+
+  summary: (id: string) =>
+    api.get<GameSummary>(`/v1/games/${id}/summary`),
 }
